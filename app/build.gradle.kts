@@ -59,5 +59,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.2.1")
     implementation("androidx.media3:media3-ui:1.2.1")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
-
+    
+    // Material Icons Extended for icons like Pause
+    implementation("androidx.compose.material:material-icons-extended:1.5.0")
 }

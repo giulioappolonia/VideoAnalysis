@@ -1,16 +1,12 @@
 package com.giulioapp.videoanalysis
 
-import android.content.ContentValues
 import android.content.Context
-import android.graphics.Bitmap
-import android.media.MediaMetadataRetriever
 import android.net.Uri
-import android.os.Environment
-import android.provider.MediaStore
-import android.widget.Toast
+
 import androidx.annotation.OptIn
 import androidx.lifecycle.ViewModel
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -59,23 +55,47 @@ class VideoViewModel : ViewModel() {
     fun loadVideo(uri: Uri) {
         val mediaItem = MediaItem.fromUri(uri)
         exoPlayer?.let {
+            it.stop()
+            it.clearMediaItems()
             it.setMediaItem(mediaItem)
             it.prepare()
-            it.play() 
+            // Force ExoPlayer to render the first frame while paused
+            it.seekTo(0L)
         }
     }
 
     fun togglePlayPause() {
         exoPlayer?.let {
-            if (it.isPlaying) it.pause() else it.play()
+            if (it.isPlaying) {
+                it.pause()
+            } else {
+                it.setPlaybackParameters(PlaybackParameters(1.0f))
+                it.play()
+            }
+        }
+    }
+
+    fun pause() {
+        exoPlayer?.pause()
+    }
+
+    fun playSlowMotion(speed: Float) {
+        exoPlayer?.let {
+            it.setPlaybackParameters(PlaybackParameters(speed))
+            it.play()
         }
     }
 
     fun seekFrame(forward: Boolean) {
+        seekFrames(if (forward) 1 else -1)
+    }
+
+    fun seekFrames(frameCount: Int) {
         val player = exoPlayer ?: return
-        val seekAmountMs = 33L 
-        val newPosition = if (forward) player.currentPosition + seekAmountMs else player.currentPosition - seekAmountMs
-        player.seekTo(newPosition)
+        val frameDurationMs = 33L // Assuming ~30fps
+        val seekAmountMs = frameCount * frameDurationMs
+        val newPosition = player.currentPosition + seekAmountMs
+        player.seekTo(newPosition.coerceAtLeast(0L))
     }
 
     fun seekTo(positionMs: Long) {
@@ -85,44 +105,7 @@ class VideoViewModel : ViewModel() {
     fun getCurrentPosition(): Long = exoPlayer?.currentPosition ?: 0L
     fun getDuration(): Long = exoPlayer?.duration?.takeIf { it > 0 } ?: 1L
 
-    @OptIn(UnstableApi::class)
-    fun extractAndSaveHighResFrame(context: Context, videoUri: Uri) {
-        val player = exoPlayer ?: return
-        val currentPositionMs = player.currentPosition
 
-        try {
-            val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(context, videoUri)
-            val bitmap = retriever.getFrameAtTime(
-                currentPositionMs * 1000,
-                MediaMetadataRetriever.OPTION_CLOSEST
-            )
-            
-            if (bitmap != null) {
-                saveBitmapToGallery(context, bitmap)
-                Toast.makeText(context, "Frame saved successfully!", Toast.LENGTH_SHORT).show()
-            }
-            retriever.release()
-        } catch (e: Exception) {
-            Toast.makeText(context, "Error saving frame.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun saveBitmapToGallery(context: Context, bitmap: Bitmap) {
-        val values = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, "SkiFrame_${System.currentTimeMillis()}.jpg")
-            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/SkiAnalysis")
-        }
-
-        val resolver = context.contentResolver
-        val imageUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-        imageUri?.let { uri ->
-            resolver.openOutputStream(uri)?.use {
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, it)
-            }
-        }
-    }
 
     override fun onCleared() {
         super.onCleared()
